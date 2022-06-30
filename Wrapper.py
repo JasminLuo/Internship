@@ -5,7 +5,7 @@ import xgboost as xgb
 from arch import arch_model
 from PyEMD import CEEMDAN
 from pyentrp import entropy as ent
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 
 
@@ -332,15 +332,16 @@ class XGBoostWrapper(object):
 
         # performance a grid search
         # Use grid search find the best hyper-parameter which simulate the lowest MAE score
-        #### Will change the validation method!!! ####
+        # Do cross-validation 5 times
+        tscv = TimeSeriesSplit(n_splits=5,test_size=1).split(train_y)
         tweaked_model = GridSearchCV(
             xgb_model,
             {
-                'max_depth':[1,2,5,10,20],
-                'n_estimators':[20,30,50,70,100],
-                'learning_rate':[0.1,0.2,0.3,0.4,0.5]
+                'max_depth':[3,5,7,9],
+                'n_estimators':[100,300,500],
+                'learning_rate':[0.01,0.07,0.2]
             },   
-            cv = 3,   # change to timeseries split!!
+            cv = tscv,
             n_jobs = 1,
             scoring = 'neg_median_absolute_error')
 
@@ -452,18 +453,19 @@ class CEEMDAN_PE_XGBoostWrapper(object):
 
         # performance a grid search
         # Use grid search find the best hyper-parameter which simulate the lowest MAE score
-        # #### Will change the validation method!!! ####
+        # Do cross-validation 5 times
+        tscv = TimeSeriesSplit(n_splits=5,test_size=1).split(train_y)
         tweaked_model = GridSearchCV(
             xgb_model,
             {
-                'max_depth':[1,2,5,10,20],
-                'n_estimators':[20,30,50,70,100],
-                'learning_rate':[0.1,0.2,0.3,0.4,0.5]
+                'max_depth':[3,5,7,9],
+                'n_estimators':[100,300,500],
+                'learning_rate':[0.01,0.07,0.2]
             },   
-            cv = 3,   #change to timeseries split!!
+            cv = tscv,
             n_jobs = 1,
             scoring = 'neg_median_absolute_error')
-
+            
         # Fit and find the best model
         tweaked_model.fit(train_x,train_y)
 
