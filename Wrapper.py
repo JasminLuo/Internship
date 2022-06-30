@@ -28,21 +28,21 @@ class ARIMAWrapper(object):
         # default to predict last 10 values of the time series
         train_y, test_y = train_test_split(self.data,test_size = split,shuffle = False)
 
-        
         # do one-step forcasting
         forecast_data = pd.DataFrame()
         model = self.fit_arima(train_y)
         for t in range(len(test_y)):
             model_fit = model.fit(train_y)
-            forecast = model_fit.predict(n_periods=1)
-            forecast = pd.DataFrame(forecast, index=test_y[t:t + 1].index, columns=['Prediction'])
+            forecast = pd.DataFrame(model_fit.predict(n_periods=1))
+            # forecast = pd.DataFrame(forecast, index=test_y[t:t + 1].index, columns=['Prediction'])
             # add the current step's forcasting data into dataframe
             forecast_data = pd.concat([forecast_data,forecast],axis=0)
             # add the real data into training set
             # retrain the arima model
             train_y = pd.concat([train_y,test_y[t:t + 1]],axis=0)
             model = self.fit_arima(train_y)
-        forecast_data = forecast_data.values.tolist()
+        forecast_data = forecast_data.to_numpy().ravel().tolist()
+        # forecast_data = forecast_data.values.tolist()
         return forecast_data
 
 # Define ARIMA model fitting (with CEEMDAN-PE transformation)
@@ -108,6 +108,7 @@ class CEEMDAN_PE_ARIMAWrapper(object):
                 model_fit = model.fit(com)
                 # do one-step foracating for each combined time series
                 forecast = pd.DataFrame(model_fit.predict(n_periods=1))
+                forecast.columns = ['Combine Model %s' % i]
                 forecast_data = pd.concat([forecast_data,forecast],axis=1)
             
             forecast_data_coms = pd.concat([forecast_data_coms,forecast_data],axis=0)
@@ -185,7 +186,7 @@ class ARIMA_GARCHWrapper(object):
             forecast_data = pd.concat([forecast_data,forecast],axis=0)
             train_y = pd.concat([train_y,test_y[t:t + 1]],axis=0)
             model = self.fit_arima(train_y)
-        forecast_data = forecast_data.values.tolist()
+        forecast_data = forecast_data.to_numpy().ravel().tolist()
         return forecast_data
 
 # Define ARIMA - GARCH model fitting (with transformation)
@@ -387,7 +388,7 @@ class XGBoostWrapper(object):
             train_x = np.concatenate([train_x,test_x[t:t+1]],axis=0)
             # step4: retrain the XGBoost model and get new hyperparameters
             model = self.fit_xgboost(train_x,train_y)
-        forecast_data = forecast_data.values.tolist()
+        forecast_data = forecast_data.to_numpy().ravel().tolist()
         return forecast_data
 
 # Define XGBoost model fitting (with transformation)
@@ -489,9 +490,9 @@ class CEEMDAN_PE_XGBoostWrapper(object):
         y_data = self.generate_x_y(lag)[1]
 
         # split data into train and test datasets
-        train_y, test_y = train_test_split(self.data,test_size = split,shuffle = False)
+        train_y, test_y = train_test_split(y_data,test_size = split,shuffle = False)
         train_x, test_x = train_test_split(x_data,test_size = split,shuffle = False)
-        
+
         forecast_data_coms = pd.DataFrame()
         
         for t in range(len(test_y)):
