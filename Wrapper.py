@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
 import pmdarima as pm
+from pyro import subsample
 import xgboost as xgb
 from arch import arch_model
+from bayes_opt import BayesianOptimization
 from PyEMD import CEEMDAN
 from pyentrp import entropy as ent
-from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
+from sklearn.model_selection import (GridSearchCV, TimeSeriesSplit,
+                                     cross_val_score, train_test_split)
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 
 
@@ -326,7 +329,9 @@ class XGBoostWrapper(object):
         y_data =  np.array(y)
         return X_data,y_data
     
-    # Setup regressor 
+
+    # performance a BayesianOptimization
+     # Setup regressor 
     def best_params(self,train_x,train_y):
         xgb_model = xgb.XGBRegressor() 
 
@@ -338,8 +343,9 @@ class XGBoostWrapper(object):
             xgb_model,
             {
                 'max_depth':[3,5,7,9],
-                'n_estimators':[100,300,500],
-                'learning_rate':[0.01,0.07,0.2]
+                # 'booster':['gbtree','gblinear','dart'],
+                # 'tree_method':['auto', 'exact', 'approx','hist'],
+                'subsample':[0.6,0.7,0.8,0.9,1]
             },   
             cv = tscv,
             n_jobs = 1,
@@ -348,19 +354,25 @@ class XGBoostWrapper(object):
         # Fit and find the best model
         tweaked_model.fit(train_x,train_y)
 
-        learning_rate = tweaked_model.best_params_['learning_rate']
+        # learning_rate = tweaked_model.best_params_['learning_rate']
         max_depth= tweaked_model.best_params_['max_depth']
-        n_estimators= tweaked_model.best_params_['n_estimators']
-        
-        return learning_rate,max_depth,n_estimators
+        # n_estimators= tweaked_model.best_params_['n_estimators']
+        booster = tweaked_model.best_params_['booster']
+        # tree_method = tweaked_model.best_params_['tree_method']
+        subsample = tweaked_model.best_params_['subsample']
+    
+        return max_depth,booster,subsample
 
     def fit_xgboost(self,train_x,train_y):
-        learning_rate, max_depth, n_estimators = self.best_params(train_x,train_y)
+        max_depth,booster,subsample  = self.best_params(train_x,train_y)
 
         model = xgb.XGBRegressor(
-            learning_rate= learning_rate, 
+            # learning_rate= learning_rate, 
             max_depth= max_depth, 
-            n_estimators= n_estimators
+            booster = booster,
+            # tree_method = tree_method,
+            subsample = subsample
+            # n_estimators= n_estimators
             )
         return model
     
@@ -378,11 +390,11 @@ class XGBoostWrapper(object):
         forecast_data = pd.DataFrame()
         # step1: fit the best XGBoost model
         model = self.fit_xgboost(train_x,train_y)
-        
+        print(model)
         for t in range(len(test_y)):
             model_fit = model.fit(train_x,train_y)
-            # step2: do one-step prediction by using the last row of training features
-            forecast = pd.DataFrame(model_fit.predict(train_x[-1:]))
+            # step2: do one-step prediction by using the first row of testing features
+            forecast = pd.DataFrame(model_fit.predict(test_x[:1]))
             forecast_data = pd.concat([forecast_data,forecast],axis=0)
             # step3: update newest features and target value
             train_y = np.concatenate([train_y,test_y[t:t+1]],axis=0)
@@ -454,7 +466,7 @@ class CEEMDAN_PE_XGBoostWrapper(object):
         # performance a grid search
         # Use grid search find the best hyper-parameter which simulate the lowest MAE score
         # Do cross-validation 5 times
-        tscv = TimeSeriesSplit(n_splits=5,test_size=1).split(train_y)
+        tscv = TimeSeriesSplit(n_splits=10,test_size=1).split(train_y)
         tweaked_model = GridSearchCV(
             xgb_model,
             {
@@ -507,8 +519,8 @@ class CEEMDAN_PE_XGBoostWrapper(object):
                 # fit the best XGBoost model
                 model = self.fit_xgboost(train_x,com) # target becomes the com data
                 model_fit = model.fit(train_x,com)
-                # do one-step prediction by using the last row of training features
-                forecast = pd.DataFrame(model_fit.predict(train_x[-1:]))
+                # do one-step prediction by using the first row of testing features
+                forecast = pd.DataFrame(model_fit.predict(test_x[:1]))
                 forecast.columns = ['Combine Model %s' % i]
                 forecast_data = pd.concat([forecast_data,forecast],axis=1)
             
